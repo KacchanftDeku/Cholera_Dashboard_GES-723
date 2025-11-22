@@ -1,9 +1,8 @@
 streamlit
-geopandas
+pyogrio
+shapely
+pyproj
 pandas
 numpy
 pydeck
-shapely
-fiona
-pyproj
-rtree
+
