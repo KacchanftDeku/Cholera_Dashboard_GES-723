@@ -1,8 +1,10 @@
 streamlit
-pyogrio
-shapely
-pyproj
+geopandas
 pandas
 numpy
 pydeck
+shapely
+fiona
+pyproj
+rtree
 
