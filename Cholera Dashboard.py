@@ -1,6 +1,5 @@
 # cholera_dashboard.py
-# FULL UPDATED VERSION USING PYOGRIO INSTEAD OF GEOPANDAS
-# ALL ORIGINAL FEATURES INCLUDED
+
 
 import streamlit as st
 import pandas as pd
@@ -352,4 +351,5 @@ st.sidebar.markdown("""
 - Scroll to zoom  
 - Drag to rotate  
 """)
+
 
