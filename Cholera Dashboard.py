@@ -1,30 +1,27 @@
+# cholera_dashboard.py
+# Fully deployment-ready for Streamlit Cloud
+
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
-import os
 import pydeck as pdk
 import numpy as np
 
-# 1. FOLDER PATH (Relative)
-
-folder = "cholera-deaths"
-
-if not os.path.exists(folder):
-    st.error("Folder not found! Make sure 'cholera-deaths' folder exists in your app.")
-    st.stop()
-
-# 2. LOAD DATA
-
+# ================================
+# 1. LOAD DATA
+# ================================
 @st.cache_data
 def load_data():
-    deaths = gpd.read_file(os.path.join(folder, "Cholera_Deaths.shp")).to_crs(epsg=4326)
-    pumps  = gpd.read_file(os.path.join(folder, "Pumps.shp")).to_crs(epsg=4326)
+    try:
+        deaths = gpd.read_file("Cholera_Deaths.shp").to_crs(epsg=4326)
+        pumps  = gpd.read_file("Pumps.shp").to_crs(epsg=4326)
+    except Exception as e:
+        st.error(f"Error loading shapefiles: {e}")
+        st.stop()
 
-    # Exact column names
     death_count_col = "Count"
     pump_id_col     = "Id"
 
-    # Check columns exist
     if death_count_col not in deaths.columns:
         st.error(f"'{death_count_col}' column not found in Cholera_Deaths.shp")
         st.stop()
@@ -34,13 +31,11 @@ def load_data():
 
     total_deaths = int(deaths[death_count_col].sum())
 
-    # Add coordinates
     deaths["lon"] = deaths.geometry.x
     deaths["lat"] = deaths.geometry.y
     pumps["lon"]  = pumps.geometry.x
     pumps["lat"]  = pumps.geometry.y
 
-    # Distance to nearest pump
     def nearest(row):
         dists = pumps.geometry.distance(row.geometry)
         idx = dists.idxmin()
@@ -55,8 +50,9 @@ def load_data():
 
 deaths_gdf, pumps_gdf, count_col, pump_col, total_deaths = load_data()
 
-# PAGE STYLE
-
+# ================================
+# 2. PAGE STYLE
+# ================================
 st.set_page_config(page_title="John Snow Cholera Map – GES723", layout="wide")
 st.markdown("""
 <style>
@@ -72,12 +68,12 @@ st.markdown(f'<div class="kpi-card">Cumulative Deaths<br>{total_deaths:,}</div>'
 
 tab1, tab2, tab3 = st.tabs(["🎯 2D Interactive Map", "🏗️ 3D Extruded Map", "📊 Data Analysis"])
 
-# 2D MAP
-
+# ================================
+# 3. 2D MAP
+# ================================
 with tab1:
     st.markdown('<div class="section-header">🎯 2D Interactive Map – Deaths and Pumps Combined</div>', unsafe_allow_html=True)
 
-    # Combined tooltip
     combined_tooltip_2d = {
         "html": """
         {% if feature.properties.type == 'death' %}
@@ -97,7 +93,6 @@ with tab1:
         "style": {"fontSize": "14px"}
     }
 
-    # Layers
     deaths_layer_2d = pdk.Layer(
         "ScatterplotLayer", data=deaths_gdf,
         get_position=["lon", "lat"], get_radius=4,
@@ -123,8 +118,9 @@ with tab1:
         map_style="light", tooltip=combined_tooltip_2d
     ), use_container_width=True)
 
-# 3D MAP
-
+# ================================
+# 4. 3D MAP
+# ================================
 with tab2:
     st.markdown('<div class="section-header">🏗️ 3D Map – Enhanced Visualization</div>', unsafe_allow_html=True)
 
@@ -179,7 +175,6 @@ with tab2:
         "style": {"fontSize": "14px"}
     }
 
-    # Camera controls
     col1, col2, col3 = st.columns(3)
     with col1:
         pitch = st.slider("Camera Angle", 0, 80, 45, key="pitch_3d")
@@ -194,8 +189,9 @@ with tab2:
         map_style="light", tooltip=combined_tooltip_3d
     ), use_container_width=True)
 
-# DATA ANALYSIS TAB
-
+# ================================
+# 5. DATA ANALYSIS
+# ================================
 with tab3:
     st.markdown('<div class="section-header">📊 Data Analysis & Insights</div>', unsafe_allow_html=True)
 
@@ -210,9 +206,51 @@ with tab3:
         st.subheader("Deaths Distribution")
         st.bar_chart(deaths_gdf[count_col].value_counts().sort_index())
 
+        st.subheader("🔗 Deaths by Nearest Pump")
+        deaths_by_pump = deaths_gdf.groupby('pump_id').agg({
+            count_col: 'sum',
+            'dist_m': 'mean'
+        }).round(1).sort_values(count_col, ascending=False)
+        st.dataframe(deaths_by_pump.head(10), use_container_width=True)
+
     with col2:
         st.subheader("🚰 Pumps Statistics")
         st.metric("Total Pumps", len(pumps_gdf))
         st.metric("Average Distance to Nearest Pump", f"{deaths_gdf['dist_m'].mean():.1f} meters")
         st.metric("Maximum Distance to Pump", f"{deaths_gdf['dist_m'].max():.1f} meters")
+        st.subheader("Distance Analysis")
+        st.write(f"**Closest death to any pump:** {deaths_gdf['dist_m'].min():.1f} meters")
+        st.write(f"**75% of deaths within:** {deaths_gdf['dist_m'].quantile(0.75):.1f} meters of a pump")
 
+# ================================
+# 6. SIDEBAR
+# ================================
+st.sidebar.title("🎯 GES723 Final Project")
+st.sidebar.subheader("📊 Data Summary")
+
+st.sidebar.markdown("**💀 Deaths Analysis**")
+st.sidebar.write(f"Total Deaths: **{total_deaths:,}**")
+st.sidebar.write(f"Death Locations: **{len(deaths_gdf)}**")
+st.sidebar.write(f"Avg Deaths per Location: **{deaths_gdf[count_col].mean():.1f}**")
+
+st.sidebar.markdown("**🚰 Pumps Analysis**")
+st.sidebar.write(f"Total Pumps: **{len(pumps_gdf)}**")
+st.sidebar.write(f"Avg Distance to Pump: **{deaths_gdf['dist_m'].mean():.1f} m**")
+
+st.sidebar.markdown("**🎨 Visualization Guide**")
+st.sidebar.markdown("""
+- **💀 Red Points/Columns**: Cholera death locations
+- **🚰 Blue Points/Towers**: Water pump locations
+- **🔥 Heatmap**: Death density
+- **🏗️ 3D Height**: Number of deaths
+""")
+
+st.sidebar.markdown("**🖱️ Interaction Guide**")
+st.sidebar.markdown("""
+- **Hover**: See detailed info
+- **2D Map**: Basic spatial analysis
+- **3D Map**: Enhanced depth perception
+- **Click & Drag**: Navigate 3D view
+""")
+
+st.sidebar.success("💡 Pro Tip: Use 3D view to see the relationship between deaths and pumps!")
